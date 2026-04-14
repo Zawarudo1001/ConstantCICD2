@@ -3,25 +3,45 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+      fail-fast: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      - name: Set up Python
+
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+            ${{ runner.os }}-pip-
+
       - name: Install dependencies
         run: |
           python -m venv venv
           source venv/bin/activate
+          pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Run flake8 linting
-
-        run: |
-          source venv/bin/activate
-          flake8 . --exclude=venv --count --select=E9,F63,F7,F82 --show-source --statistics
+          pip install pytest flake8
 
       - name: Run tests
         run: |
           source venv/bin/activate
-          pytest
+          pytest -v --tb=short
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.9'
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
